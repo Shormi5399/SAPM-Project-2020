@@ -1,9 +1,9 @@
-# Effect of 2007 crisis on the economy
+# Effect of financial crisis on the economy
 
 
 Motivation
 
-The financial crisis in 2007-2009 occurred as a result of risky financial dealings in the real estate market which spilled over into the economy at large (Marshall, 2009). The resulting economic downturn, particularly the periods before and after the collapse of Lehman Brothers in September-October 2008, provides an opportunity to compare impact on different economic measures in different regions of the world. We utilize the financial crisis scenario as a timeframe to analyze the relationships between Consumer Price Index (CPI),  unemployment, and  the unorganized labor force in three major geographic regions.
+The financial crisis occurres as a result of risky financial dealings in the real estate market which spilled over into the economy at large (Marshall, 2009). The resulting economic downturn, particularly the periods before and after the collapse of Lehman Brothers in September-October 2008, provides an opportunity to compare impact on different economic measures in different regions of the world. We utilize the financial crisis scenario as a timeframe to analyze the relationships between Consumer Price Index (CPI),  unemployment, and  the unorganized labor force in three major geographic regions.
 
 Research Question
 
