@@ -1,0 +1,418 @@
+---
+title: "Complete Analysis - Effect of Economic Crisis"
+author: "Sharmila Biswas"
+output: html_document
+---
+
+Github link: https://github.com/Shormi5399/Data-Science-I-Project
+
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(ggplot2)
+library(tidyr)
+library(dplyr)
+library(forecast)
+library(lmtest)
+```
+
+Let's understand the effect of CPI,GDP and Unemployment further by analyzing trend graph from 1991 to 2014 in North America(NAC),European Union(EUU) and South Asia(SAS).
+
+Are there obvious trends in the data (over time, across subgroups, etc.), and are the differences statistically significant?
+
+```{r}
+region_data <- read.csv("region_data.csv")
+unemp_compare <- region_data %>%
+  select(Country.Name,Country.Code,Year,Unemployment.Rate,Time_Period) %>%
+  filter(Year >= 1991 & Year<= 2014 & (Country.Code =='EUU'| Country.Code == 'SAS' | Country.Code == 'NAC')) %>%
+  group_by(Year)
+
+ggplot(unemp_compare,aes(x = Year, y = Unemployment.Rate, col = Country.Code, group = Country.Code)) +geom_line(na.rm = T,lwd = 1)+ theme(axis.text.x=element_text(angle=90, hjust=1))
+```
+
+There is a steep increase in the uemployment rates of North America and Europe while South Asia is comparitively stable post the 2008 recession.
+
+
+```{r}
+manufacturing_compare <- region_data %>%
+  select(Country.Name,Country.Code,Year,Manufacturing.Rate) %>%
+  filter(Year >= 1991 & Year<= 2014 & (Country.Code =='EUU'| Country.Code == 'SAS' | Country.Code == 'NAC')) %>%
+  group_by(Year)
+
+ggplot(manufacturing_compare,aes(x = Year, y = Manufacturing.Rate, col = Country.Code, group = Country.Code)) +geom_line(na.rm = T,lwd = 1)+ theme(axis.text.x=element_text(angle=90, hjust=1))
+```
+
+
+```{r}
+trade_compare <- region_data %>%
+  select(Country.Name,Country.Code,Year,Trade) %>%
+  filter(Year >= 1991 & Year<= 2014 & (Country.Code =='EUU'| Country.Code == 'SAS' | Country.Code == 'NAC')) %>%
+  group_by(Year)
+
+ggplot(trade_compare,aes(x = Year, y = Trade, col = Country.Code, group = Country.Code)) +geom_line(na.rm = T,lwd = 1)+ theme(axis.text.x=element_text(angle=90, hjust=1))
+
+```
+
+
+```{r}
+gdp_compare <- region_data %>%
+  select(Country.Name,Country.Code,Year,GDP) %>%
+  filter(Year >= 1991 & Year<= 2014 & (Country.Code =='EUU'| Country.Code == 'SAS' | Country.Code == 'NAC')) %>%
+  group_by(Year)
+
+ggplot(gdp_compare,aes(x = Year, y = GDP, col = Country.Code, group = Country.Code)) +geom_line(na.rm = T,lwd = 1)+ theme(axis.text.x=element_text(angle=90, hjust=1))
+
+```
+
+Understanding time series implementation for CPI in USA:
+
+```{r}
+CPI_trend<-read.csv("CPI_World_Bank.csv")
+#plot(CPI_trend$)
+colnames(CPI_trend)
+#goal here is time period on x and CPI on y.
+trends<-read.csv("Timeseries.csv")
+class(trends)
+#summary(lm(Time ~ CPI_USA, data=trends))
+#plot(trends)
+#abline(lsfit(x=trends$Time,y=trends$CPI_USA),col="red")
+#install.packages('tseries') 
+require(tseries) 
+#install.packages('xts')
+require(xts)
+#converting data into time series data
+trends.ts<-ts(as.vector(trends), start = c(1960,1), end = c(2015),frequency = 1)
+trends.ts
+class(trends.ts)
+plot(trends.ts)
+#Dickey-fuller test to see if the time series is stationary.
+adf.test(trends.ts)
+#Checking for p and q values through auto correlation function and partial auto correlation function.
+acf(trends.ts)
+pacf(trends.ts)
+#this is an AR model
+#install.packages('forecast')
+auto.arima(trends.ts)
+trends.arimausa<- arima(trends.ts, order=c(1,2,1))
+trends.arimausa
+trend.preds<-forecast.Arima(trends.arimausa,h=12)
+plot.forecast(trend.preds)
+summary(trend.preds)
+
+#Hypothesis testing for USA CPI data
+#install.packages('lmtest')
+coeftest(trends.arimausa)
+#z value is 2.2014, p=0.02771
+#another way to obtain p value to verify
+(1-pnorm(abs(trends.arimausa$coef)/sqrt(diag(trends.arimausa$var.coef))))*2
+
+trends.resid <- residuals(trends.arimausa)
+Box.test(trends.resid, lag = 10, type = "Ljung-Box")
+```
+
+Attempt to find trends in the CPI data.
+This data set contains CPI for 265 countries over a period of 56 years.
+The variable CPI is time sensitive.
+We have used Dickey-fuller test to see if the time series is stationary and checked for p and q values through auto correlation function and partial auto correlation function.
+
+p value obtained from this analysis is 0.027. Since CPI was an AR series, we will analyze this further on the statistical significance and its effect on the hypothesis.
+
+What are the other salient aspects of the data (e.g. geospatial factors, text content, etc.)
+
+The following plots are forecasts for each of the selected country's future unemployment rates based on the 1991-2014 data.  This also provides a projection of what the unemployment rates might have looked like in the absence of the data post the financial crisis
+
+```{r} 
+#NAC unemployment forecast vs actual, 2000-2007
+par(mfrow=c(1,3))
+trends.usa <-region_data %>% select(Year,Unemployment.Rate,Country.Code) %>% filter(Country.Code == "NAC")  
+trendsts.usa <- ts(as.vector(trends.usa$Unemployment.Rate),start = c(1991,1), end = c(2014), frequency = 1)
+
+
+trends.usabc <- region_data  %>% select(Year,Unemployment.Rate,Country.Code) %>% filter(Country.Code == "NAC" & Year >=1991 & Year<=2007)
+trendsts.usabc <- ts(as.vector(trends.usabc$Unemployment.Rate),start = c(1991,1), end = c(2007), frequency = 1)
+#install.packages("forecast")
+
+
+trends.usaac <- region_data  %>% select(Year,Unemployment.Rate,Country.Code) %>% filter(Country.Code == "NAC" & Year >=1991 & Year<=2008)
+trendsts.usaac <- ts(as.vector(trends.usabc$Unemployment.Rate),start = c(1991,1), end = c(2008), frequency = 1)
+#install.packages("forecast")
+
+
+trends.arimausa<- auto.arima(trendsts.usabc, seasonal = FALSE)
+trends.arimausa
+trend.preds<-forecast.Arima(trends.arimausa,h=12)
+plot.forecast(trend.preds, ylim = c(2,10), xlim = c(2000,2010),xlab="NAC Unemployment fcst, 1991-2007 data", ylab="% Unemployment")
+
+summary(trend.preds)
+plot(trendsts.usa, ylim = c(2,10), xlim = c(2000,2010), xlab="NAC Actual Unemployment" ,ylab="% Unemployment")
+
+
+trends.arimausa<- auto.arima(trendsts.usaac, seasonal = FALSE)
+trends.arimausa
+trend.preds<-forecast.Arima(trends.arimausa,h=12)
+plot.forecast(trend.preds, ylim = c(2,10), xlim = c(2000,2010),xlab="NAC Unemployment fcst, 1991-2008 data", ylab="% Unemployment")
+```
+
+
+```{r}
+par(mfrow=c(1,3))
+#EU unemployment forecast vs actual, 2000-2007
+#needs work
+trends.eu <-region_data %>% select(Year,Unemployment.Rate,Country.Code) %>% filter(Country.Code == "EUU")  
+trendsts.eu <- ts(as.vector(trends.eu$Unemployment.Rate),start = c(1991,1), end = c(2014), frequency = 1)
+
+trends.eubc <- region_data  %>% select(Year,Unemployment.Rate,Country.Code) %>% filter(Country.Code == "EUU" & Year >=1991 & Year<=2007)
+trendsts.eubc <- ts(as.vector(trends.eubc$Unemployment.Rate),start = c(1991,1), end = c(2007), frequency = 1)
+
+trends.euac <- region_data  %>% select(Year,Unemployment.Rate,Country.Code) %>% filter(Country.Code == "EUU" & Year >=1991 & Year<=2008)
+trendsts.euac <- ts(as.vector(trends.euac$Unemployment.Rate),start = c(1991,1), end = c(2008), frequency = 1)
+
+trends.arimaeu<- auto.arima(trendsts.eubc, seasonal = FALSE) 
+trends.arimaeu
+trend.preds<-forecast.Arima(trends.arimaeu,h=12)
+plot.forecast(trend.preds, ylim = c(2,10), xlim = c(2000,2010),xlab="EUU unemployment forecast, 1991-2007 data",ylab="% Unemployment")
+
+summary(trend.preds)
+plot(trendsts.eu, ylim = c(2,10), xlim = c(2000,2010), xlab="EUU Actual Unemployment",ylab="% Unemployment")
+
+trends.arimaeu<- auto.arima(trendsts.euac,seasonal = FALSE)
+trends.arimaeu
+trend.preds<-forecast.Arima(trends.arimaeu,h=12)
+plot.forecast(trend.preds, ylim = c(2,10), xlim = c(2000,2010),xlab="EUU Unemployment fcst, 1991-2008 data", ylab="% Unemployment")
+```
+
+```{r}
+par(mfrow=c(1,3))
+#SAS unemployment forecast vs actual, 2000-2007
+trends.sas <-region_data %>% select(Year,Unemployment.Rate,Country.Code) %>% filter(Country.Code == "SAS")
+trendsts.sas <- ts(as.vector(trends.sas$Unemployment.Rate),start = c(1991,1), end = c(2014), frequency = 1)
+
+trends.sasbc <- region_data  %>% select(Year,Unemployment.Rate,Country.Code) %>% filter(Country.Code == "SAS" & Year >=1991 & Year<=2007)
+trendsts.sasbc <- ts(as.vector(trends.sasbc$Unemployment.Rate),start = c(1991,1), end = c(2007), frequency = 1)
+
+trends.sasac <- region_data  %>% select(Year,Unemployment.Rate,Country.Code) %>% filter(Country.Code == "SAS" & Year >=1991 & Year<=2008)
+trendsts.sasac <- ts(as.vector(trends.sasac$Unemployment.Rate),start = c(1991,1), end = c(2008), frequency = 1)
+
+trends.arimasas<- auto.arima(trendsts.sasbc) 
+trend.preds<-forecast.Arima(trends.arimasas,h=12)
+plot.forecast(trend.preds, ylim = c(2,10), xlim = c(2000,2010),xlab="SAS unemployment forecast, 1991-2007 data",ylab="% Unemployment")
+
+summary(trend.preds)
+plot(trendsts.sas, ylim = c(2,10), xlim = c(2000,2010), xlab="SAS Actual Unemployment",ylab="% unemployment")
+
+trends.arimasas<- auto.arima(trendsts.sasac) 
+trend.preds<-forecast.Arima(trends.arimasas,h=12)
+plot.forecast(trend.preds, ylim = c(2,10), xlim = c(2000,2010),xlab="SAS unemployment forecast, 1991-2008 data",ylab="% Unemployment")
+```
+
+```{r}
+#manufacturing rate US region
+par(mfrow=c(1,3))
+trends.usa <-region_data %>% select(Year,Manufacturing.Rate,Country.Code) %>% filter(Country.Code == "NAC")  
+trendsts.usa <- ts(as.vector(trends.usa$Manufacturing.Rate),start = c(1991,1), end = c(2014), frequency = 1)
+
+trends.usabc <- region_data  %>% select(Year,Manufacturing.Rate,Country.Code) %>% filter(Country.Code == "NAC" & Year >=1991 & Year<=2007)
+trendsts.usabc <- ts(as.vector(trends.usabc$Manufacturing.Rate),start = c(1991,1), end = c(2007), frequency = 1)
+
+trends.usaac <- region_data  %>% select(Year,Manufacturing.Rate,Country.Code) %>% filter(Country.Code == "NAC" & Year >=1991 & Year<=2008)
+trendsts.usaac <- ts(as.vector(trends.usaac$Manufacturing.Rate),start = c(1991,1), end = c(2008), frequency = 1)
+
+trends.arimausa<- auto.arima(trendsts.usabc)
+trend.preds<-forecast.Arima(trends.arimausa,h=12)
+plot.forecast(trend.preds, ylim = c(10,18), xlim = c(2000,2010), xlab="NAC mfg forecast, 1991-2007 data", ylab="rate")
+
+summary(trend.preds)
+plot(trendsts.usa, ylim = c(10,18), xlim = c(2000,2010), xlab="NAC Actual Mfg",ylab="% unemployment")
+
+trends.arimausa<- auto.arima(trendsts.usaac)
+trend.preds<-forecast.Arima(trends.arimausa,h=12)
+plot.forecast(trend.preds, ylim = c(10,18), xlim = c(2000,2010), xlab="NAC mfg forecast, 1991-2008 data", ylab="rate")
+```
+
+```{r}
+par(mfrow=c(1,3))
+#manufacturing rate EUU region
+trends.euu <-region_data %>% select(Year,Manufacturing.Rate,Country.Code) %>% filter(Country.Code == "EUU")
+trendsts.euu <- ts(as.vector(trends.euu$Manufacturing.Rate),start = c(1991,1), end = c(2014), frequency = 1)
+
+trends.eubc <- region_data  %>% select(Year,Manufacturing.Rate,Country.Code) %>% filter(Country.Code == "EUU" & Year >=1991 & Year<=2007)
+trendsts.eubc <- ts(as.vector(trends.eubc$Manufacturing.Rate),start = c(1991,1), end = c(2007), frequency = 1)
+
+trends.euac <- region_data  %>% select(Year,Manufacturing.Rate,Country.Code) %>% filter(Country.Code == "EUU" & Year >=1991 & Year<=2008)
+trendsts.euac <- ts(as.vector(trends.euac$Manufacturing.Rate),start = c(1991,1), end = c(2008), frequency = 1)
+
+trends.arimaeu<- auto.arima(trendsts.eubc)
+trend.preds<-forecast.Arima(trends.arimaeu,h=12)
+plot.forecast(trend.preds, ylim = c(12,20), xlim = c(2000,2010), xlab="EUU mfg forecast, 1991-2007 data", ylab="rate")
+
+plot(trendsts.euu,ylim = c(12,20), xlim = c(2000,2010),xlab="EUU mfg rate", ylab="rate")
+
+trends.arimaeu<- auto.arima(trendsts.euac)
+trend.preds<-forecast.Arima(trends.arimaeu,h=12)
+plot.forecast(trend.preds, ylim = c(12,20),xlim = c(2000,2010), xlab="EUU mfg forecast, 1991-2008 data", ylab="rate")
+```
+
+```{r}
+par(mfrow=c(1,3))
+#manufacturing rate SAS region
+trends.sas <-region_data %>% select(Year,Manufacturing.Rate,Country.Code) %>% filter(Country.Code == "SAS")
+trendsts.sas <- ts(as.vector(trends.sas$Manufacturing.Rate),start = c(1991,1), end = c(2014), frequency = 1)
+
+trends.sasbc <- region_data  %>% select(Year,Manufacturing.Rate,Country.Code) %>% filter(Country.Code == "SAS" & Year >=1991 & Year<=2007)
+trendsts.sasbc <- ts(as.vector(trends.sasbc$Manufacturing.Rate),start = c(1991,1), end = c(2007), frequency = 1)
+
+trends.sasac <- region_data  %>% select(Year,Manufacturing.Rate,Country.Code) %>% filter(Country.Code == "SAS" & Year >=1991 & Year<=2008)
+trendsts.sasac <- ts(as.vector(trends.sasac$Manufacturing.Rate),start = c(1991,1), end = c(2008), frequency = 1)
+
+trends.arimasas<- auto.arima(trendsts.sasbc)
+trend.preds<-forecast.Arima(trends.arimasas,h=12)
+plot.forecast(trend.preds, ylim = c(14,20), xlim = c(2000,2010), xlab="SAS mfg forecast, 1991-2007 data", ylab="rate")
+
+plot(trendsts.sas,ylim = c(14,20),xlim = c(2000,2010),xlab="SAS mfg rate", ylab="rate")
+
+trends.arimasas<- auto.arima(trendsts.sasac)
+trend.preds<-forecast.Arima(trends.arimasas,h=12)
+plot.forecast(trend.preds,  ylim = c(14,20),xlim = c(2000,2010), xlab="SAS mfg forecast, 1991-2008 data", ylab="rate")
+```
+
+```{r}
+par(mfrow=c(1,3))
+#US trade
+trends.usa <-region_data %>% select(Year,Trade,Country.Code) %>% filter(Country.Code == "NAC")  
+trendsts.usa <- ts(as.vector(trends.usa$Trade),start = c(1991,1), end = c(2014), frequency = 1)
+
+trends.usabc <- region_data  %>% select(Year,Trade,Country.Code) %>% filter(Country.Code == "NAC" & Year >=1991 & Year<=2007)
+trendsts.usabc <- ts(as.vector(trends.usabc$Trade),start = c(1991,1), end = c(2007), frequency = 1)
+
+trends.usaac <- region_data  %>% select(Year,Trade,Country.Code) %>% filter(Country.Code == "NAC" & Year >=1991 & Year<=2008)
+trendsts.usaac <- ts(as.vector(trends.usaac$Trade),start = c(1991,1), end = c(2008), frequency = 1)
+
+trends.arimausa<- auto.arima(trendsts.usabc)
+trend.preds<-forecast.Arima(trends.arimausa,h=12)
+plot.forecast(trend.preds, ylim = c(25,35),xlim = c(2000,2010),xlab="NAC trade forecast, 1991-2007 data", ylab="rate")
+
+plot(trendsts.usa,  ylim = c(25,35),xlim = c(2000,2010),xlab="NAC actual trade rate", ylab="rate")
+
+trends.arimausa<- auto.arima(trendsts.usaac)
+trend.preds<-forecast.Arima(trends.arimausa,h=12)
+plot.forecast(trend.preds,ylim = c(25,35), xlim = c(2000,2010),xlab="NAC trade forecast, 1991-2008 data", ylab="rate")
+```
+
+```{r}
+par(mfrow=c(1,3))
+#EU trade
+trends.eu <-region_data %>% select(Year,Trade,Country.Code) %>% filter(Country.Code == "EUU")  
+trendsts.eu <- ts(as.vector(trends.eu$Trade),start = c(1991,1), end = c(2014), frequency = 1)
+
+trends.eubc <- region_data  %>% select(Year,Trade,Country.Code) %>% filter(Country.Code == "EUU" & Year >=1991 & Year<=2007)
+trendsts.eubc <- ts(as.vector(trends.eubc$Trade),start = c(1991,1), end = c(2007), frequency = 1)
+
+trends.euac <- region_data  %>% select(Year,Trade,Country.Code) %>% filter(Country.Code == "EUU" & Year >=1991 & Year<=2008)
+trendsts.euac <- ts(as.vector(trends.euac$Trade),start = c(1991,1), end = c(2008), frequency = 1)
+
+trends.arimaeu<- auto.arima(trendsts.eubc)
+trend.preds<-forecast.Arima(trends.arimaeu,h=12)
+plot.forecast(trend.preds,ylim = c(60,90), xlim = c(2000,2010),xlab="EUU trade forecast, 1991-2007 data", ylab="rate")
+
+plot(trendsts.eu, ylim = c(60,90), xlim = c(2000,2010),xlab="EUU actual trade rate", ylab="rate")
+
+trends.arimaeu<- auto.arima(trendsts.euac)
+trend.preds<-forecast.Arima(trends.arimaeu,h=12)
+plot.forecast(trend.preds, ylim = c(60,90),xlim = c(2000,2010),xlab="EUU trade forecast, 1991-2008 data", ylab="rate")
+```
+
+```{r}
+par(mfrow=c(1,3))
+#SAS trade
+trends.sas <-region_data %>% select(Year,Trade,Country.Code) %>% filter(Country.Code == "SAS")  
+trendsts.sas <- ts(as.vector(trends.sas$Trade),start = c(1991,1), end = c(2014), frequency = 1)
+
+trends.sasbc <- region_data  %>% select(Year,Trade,Country.Code) %>% filter(Country.Code == "SAS" & Year >=1991 & Year<=2007)
+trendsts.sasbc <- ts(as.vector(trends.sasbc$Trade),start = c(1991,1), end = c(2007), frequency = 1)
+
+trends.sasac <- region_data  %>% select(Year,Trade,Country.Code) %>% filter(Country.Code == "SAS" & Year >=1991 & Year<=2008)
+trendsts.sasac <- ts(as.vector(trends.sasac$Trade),start = c(1991,1), end = c(2008), frequency = 1)
+
+trends.arimasas<- auto.arima(trendsts.sasbc)
+trend.preds<-forecast.Arima(trends.arimasas,h=12)
+plot.forecast(trend.preds,ylim = c(20,70), xlim = c(2000,2010),xlab="SAS trade forecast, 1991-2007 data", ylab="rate")
+
+plot(trendsts.sas,ylim = c(20,70),xlim = c(2000,2010),xlab="SAS actual trade rate", ylab="rate")
+
+trends.arimasas<- auto.arima(trendsts.sasac)
+trend.preds<-forecast.Arima(trends.arimasas,h=12)
+plot.forecast(trend.preds, ylim = c(20,70),xlim = c(2000,2010),xlab="SAS trade forecast, 1991-2008 data", ylab="rate")
+```
+
+```{r}
+par(mfrow=c(1,3))
+#US GDP
+trends.usa <-region_data %>% select(Year,GDP,Country.Code) %>% filter(Country.Code == "NAC")  
+trendsts.usa <- ts(as.vector(trends.usa$GDP),start = c(1991,1), end = c(2014), frequency = 1)
+
+trends.usabc <- region_data  %>% select(Year,GDP,Country.Code) %>% filter(Country.Code == "NAC" & Year >=1991 & Year<=2007)
+trendsts.usabc <- ts(as.vector(trends.usabc$GDP),start = c(1991,1), end = c(2007), frequency = 1)
+
+trends.usaac <- region_data  %>% select(Year,GDP,Country.Code) %>% filter(Country.Code == "NAC" & Year >=1991 & Year<=2008)
+trendsts.usaac <- ts(as.vector(trends.usaac$GDP),start = c(1991,1), end = c(2008), frequency = 1)
+
+trends.arimausa<- auto.arima(trendsts.usabc)
+trend.preds<-forecast.Arima(trends.arimausa,h=12)
+plot.forecast(trend.preds,ylim = c(1.0e+13,2.0e+13), xlim = c(2000,2010), xlab="NAR GDP forecast, 1991-2007 data")
+
+plot(trendsts.usa , ylim = c(1.0e+13,2.0e+13), xlim = c(2000,2010),xlab="NAR GDP", ylab ="point value")
+
+trends.arimausa<- auto.arima(trendsts.usaac)
+trend.preds<-forecast.Arima(trends.arimausa,h=12)
+plot.forecast(trend.preds, ylim = c(1.0e+13,2.0e+13),xlim = c(2000,2010), xlab="NAR GDP forecast, 1991-2008 data")
+```
+
+```{r}
+par(mfrow=c(1,3))
+#EUU GDP
+trends.eu <-region_data %>% select(Year,GDP,Country.Code) %>% filter(Country.Code == "EUU")  
+trendsts.eu <- ts(as.vector(trends.eu$GDP),start = c(1991,1), end = c(2014), frequency = 1)
+
+trends.eubc <- region_data  %>% select(Year,GDP,Country.Code) %>% filter(Country.Code == "EUU" & Year >=1991 & Year<=2007)
+trendsts.eubc <- ts(as.vector(trends.eubc$GDP),start = c(1991,1), end = c(2007), frequency = 1)
+
+trends.euac <- region_data  %>% select(Year,GDP,Country.Code) %>% filter(Country.Code == "EUU" & Year >=1991 & Year<=2008)
+trendsts.euac <- ts(as.vector(trends.eubc$GDP),start = c(1991,1), end = c(2008), frequency = 1)
+
+trends.arimaeu<- auto.arima(trendsts.eubc)
+trend.preds<-forecast.Arima(trends.arimaeu,h=12)
+plot.forecast(trend.preds, ylim=c(8e+12,2.5e+13),xlim = c(2000,2010), xlab="EU GDP forecast, 1991-2007 data")
+
+plot(trendsts.eu , ylim=c(8e+12,2.5e+13), xlim = c(2000,2010),xlab="EU GDP")
+
+trends.arimaeu<- auto.arima(trendsts.euac)
+trend.preds<-forecast.Arima(trends.arimaeu,h=12)
+plot.forecast(trend.preds, ylim=c(8e+12,2.5e+13),xlim = c(2000,2010), xlab="EU GDP forecast, 1991-2008 data")
+```
+
+```{r}
+par(mfrow=c(1,3))
+#SAS GDP
+trends.sas <-region_data %>% select(Year,GDP,Country.Code) %>% filter(Country.Code == "SAS")  
+trendsts.sas <- ts(as.vector(trends.sas$GDP),start = c(1991,1), end = c(2014), frequency = 1)
+
+trends.sasbc <- region_data  %>% select(Year,GDP,Country.Code) %>% filter(Country.Code == "SAS" & Year >=1991 & Year<=2007)
+trendsts.sasbc <- ts(as.vector(trends.sasbc$GDP),start = c(1991,1), end = c(2007), frequency = 1)
+
+trends.sasac <- region_data  %>% select(Year,GDP,Country.Code) %>% filter(Country.Code == "SAS" & Year >=1991 & Year<=2008)
+trendsts.sasac <- ts(as.vector(trends.sasbc$GDP),start = c(1991,1), end = c(2008), frequency = 1)
+
+trends.arimasas<- auto.arima(trendsts.sasbc)
+trend.preds<-forecast.Arima(trends.arimasas,h=12)
+plot.forecast(trend.preds,ylim = c(0e+12, 3e+12),xlim = c(2000,2010), xlab="SAS GDP forecast, 1991-2007 data")
+
+plot(trendsts.sas ,ylim = c(0e+12, 4e+12) ,xlim = c(2000,2010),xlab="SAS GDP")
+
+trends.arimasas<- auto.arima(trendsts.sasac)
+trend.preds<-forecast.Arima(trends.arimasas,h=12)
+plot.forecast(trend.preds,ylim = c(0e+12, 3e+12),xlim = c(2000,2010), xlab="SAS GDP forecast, 1991-2008 data")
+```
+
+CPI data was unavailable at region-level. So we could not perform time series analysis for CPI.
+
+

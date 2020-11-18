@@ -1,0 +1,162 @@
+---
+title: "Complete Analysis - Effect of Economic Crisis"
+author: "Sharmila Biswas"
+output: html_document
+---
+
+Github link: https://github.com/Shormi5399/Data-Science-I-Project
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(ggplot2)
+library(tidyr)
+library(dplyr)
+library(forecast)
+library(lmtest)
+```
+
+## Exploratory Analysis
+
+How many unique observations to you have?
+
+The number of unique observations for CPI, GDP, unemployment, manufacturing and trade respectively are:
+
+```{r}
+economy_data <- read.csv("economy_data.csv")
+nrow(economy_data[!is.na(economy_data$CPI),])
+nrow(economy_data[!is.na(economy_data$GDP),])
+nrow(economy_data[!is.na(economy_data$Unemployment.Rate),])
+nrow(economy_data[!is.na(economy_data$Manufacturing.Rate),])
+nrow(economy_data[!is.na(economy_data$Trade),])
+```
+
+What information/features/characteristics do you have for each observation?
+
+We modify the scope of our dataset from 1991 to 2014, since unemployment data is only available for this range.
+
+```{r}
+economy_data <- economy_data[economy_data$Year>=1991 & economy_data$Year<=2014,]
+head(economy_data)
+```
+
+What are the min/max/mean/median/sd values for each of these features?
+
+```{r summary_stats_cpi}
+#Summary values for CPI
+summary(economy_data$CPI,na.rm = TRUE)
+sd(economy_data$CPI, na.rm = TRUE)
+
+#Summary values for GDP
+summary(economy_data$GDP,na.rm = TRUE)
+sd(economy_data$GDP, na.rm = TRUE)
+
+#Summary values for Unemployment
+summary(economy_data$Unemployment.Rate,na.rm = TRUE)
+sd(economy_data$Unemployment.Rate, na.rm = TRUE)
+
+#Summary values for Manufacturing
+summary(economy_data$Manufacturing.Rate,na.rm = TRUE)
+sd(economy_data$Manufacturing.Rate, na.rm = TRUE)
+
+#Summary values for Trade
+summary(economy_data$Trade,na.rm = TRUE)
+sd(economy_data$Trade, na.rm = TRUE)
+
+```
+
+We found the averages for CPI, gdp, unemployment, manufacturing and trade for all the countries.
+Now, let's manipulate the dataset to include a column to indicate if the time period for the data is before(1991-2006) or after(2007-2014) the economic crisis.
+
+
+```{r}
+economy_data <- economy_data %>% mutate(Time_Period = ifelse(Year < 2007,"Before Crisis","After Crisis"))
+head(economy_data)
+```
+
+Converting Time_Period to a factor variable and releveling the labels.
+
+```{r}
+economy_data$Time_Period <- as.character(economy_data$Time_Period)
+economy_data$Time_Period <- factor(economy_data$Time_Period, levels = c("Before Crisis", "After Crisis"))
+levels(economy_data$Time_Period)
+```
+
+
+```{r}
+ggplot(economy_data, aes(x=Time_Period, y = Unemployment.Rate))+geom_boxplot(na.rm = T)
+```
+
+The boxplot confirms the finding the median unemployment is almost the same before and after crisis.
+This is an interesting finding since the 2007 economic crisis led to unemployment. We will try to analyze how the unemployment trends varied post recession by drilling down further.
+
+
+```{r}
+ggplot(economy_data, aes(x=Time_Period, y = CPI))+geom_boxplot(na.rm = T)
+```
+
+The median CPI has increased increased post the crisis but the variability has got much less over time.
+
+```{r}
+ggplot(economy_data, aes(x=Time_Period, y = GDP))+ylim(0,100000000)+geom_boxplot(na.rm = T)
+```
+
+The median gdp has decreased post the crisis but the variability has got much less over time.
+
+```{r}
+ggplot(economy_data, aes(x=Time_Period, y = Manufacturing.Rate))+geom_boxplot(na.rm = T)
+```
+
+The median manufacturing rate has decreased post the crisis.
+
+```{r}
+ggplot(economy_data, aes(x=Time_Period, y = Trade))+geom_boxplot(na.rm = T)
+```
+
+
+What is the distribution of the core features (show a histogram)?
+
+Below are the histograms of the distribution of the CPI, GDP, Unemployment, Manufacturing and Trade before and after 2007 economic crisis.
+
+```{r hist_cpi}
+ggplot(economy_data, aes(x = CPI)) +
+  geom_histogram(fill = "white",
+                 color = "black",
+                 binwidth = 5,na.rm = T)+facet_grid(.~Time_Period)
+```
+
+The distribution of CPI was significantly different before and after crisis. The count of the number of countries with higher inflation rates increased after crisis.
+
+```{r}
+
+ggplot(economy_data, aes(x = GDP)) +
+  geom_histogram(fill = "white",
+                 color = "black",na.rm = T)+facet_grid(.~Time_Period)
+
+```
+
+
+```{r}
+
+ggplot(economy_data, aes(x = Unemployment.Rate)) +
+  geom_histogram(fill = "white",
+                 color = "black",
+                 binwidth = 0.5,na.rm = T)+facet_grid(.~Time_Period)
+```
+
+
+```{r}
+
+ggplot(economy_data, aes(x = Manufacturing.Rate)) +
+  geom_histogram(fill = "white",
+                 color = "black",na.rm = T)+facet_grid(.~Time_Period)
+
+```
+
+```{r}
+
+ggplot(economy_data, aes(x = Trade)) +
+  geom_histogram(fill = "white",
+                 color = "black",na.rm = T)+facet_grid(.~Time_Period)
+
+```
+

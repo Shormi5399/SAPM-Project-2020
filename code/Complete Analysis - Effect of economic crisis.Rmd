@@ -1,0 +1,695 @@
+---
+title: "Complete Analysis - Effect of Economic Crisis"
+author: "Sharmila Biswas"
+output: html_document
+---
+
+Github link: https://github.com/Shormi5399/Data-Science-I-Project
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(ggplot2)
+library(tidyr)
+library(dplyr)
+library(forecast)
+library(lmtest)
+```
+
+Cleaning up the data!
+
+```{r load_cpi}
+cpi = read.csv("CPI_World_Bank.csv",check.names = FALSE)
+#Get country and indicator column names and remove spaces using make.names
+country_indicator_names <- make.names(names(cpi[c(1:4)])) 
+#country_indicator_names
+
+#Get year column names
+year_column_names <- names(cpi[c(5:ncol(cpi))])
+#year_column_names
+
+#Reassign the modified column names to actual column names
+names(cpi) <- c(country_indicator_names,year_column_names)
+names(cpi)
+
+#Gather all year column names into a new column called Year and assign its values to a column called CPI
+clean_cpi <- gather(cpi,Year,CPI,-Country.Name,-Country.Code,-Indicator.Name,-Indicator.Code)
+cpi_data <- clean_cpi[,!colnames(clean_cpi) %in% c("Indicator.Name","Indicator.Code")]
+head(clean_cpi)
+
+unemp = read.csv("Unemployment_ILO.csv",check.names = FALSE)
+country_indicator_names <- make.names(names(unemp[c(1:4)])) 
+#country_indicator_names
+
+#Get year column names
+year_column_names <- names(unemp[c(5:ncol(unemp))])
+#year_column_names
+
+#Reassign the modified column names to actual column names
+names(unemp) <- c(country_indicator_names,year_column_names)
+names(unemp)
+
+#Gather all year column names into a new column called Year and assign its values to a column called unemp
+clean_unemp <- gather(unemp,Year,Unemployment.Rate,-Country.Name,-Country.Code,-Indicator.Name,-Indicator.Code)
+unemp_data <- clean_unemp[,!colnames(clean_unemp) %in% c("Indicator.Name","Indicator.Code")]
+head(clean_unemp)
+
+gdp = read.csv("gdp.csv",check.names = FALSE)
+country_indicator_names <- make.names(names(gdp[c(1:4)])) 
+#country_indicator_names
+
+#Get year column names
+year_column_names <- names(gdp[c(5:ncol(gdp))])
+#year_column_names
+
+#Reassign the modified column names to actual column names
+names(gdp) <- c(country_indicator_names,year_column_names)
+names(gdp)
+
+#Gather all year column names into a new column called Year and assign its values to a column called gdp
+clean_gdp <- gather(gdp,Year,GDP,-Country.Name,-Country.Code,-Indicator.Name,-Indicator.Code)
+gdp_data <- clean_gdp[,!colnames(clean_gdp) %in% c("Indicator.Name","Indicator.Code")]
+head(clean_gdp)
+
+#Reading Manufacturing percentage data.
+manufacturing = read.csv("Manufacturing.csv",check.names = FALSE)
+country_indicator_names <- make.names(names(manufacturing[c(1:4)])) 
+#country_indicator_names
+
+#Get year column names
+year_column_names <- names(manufacturing[c(5:ncol(manufacturing))])
+#year_column_names
+
+#Reassign the modified column names to actual column names
+names(manufacturing) <- c(country_indicator_names,year_column_names)
+names(manufacturing)
+
+#Gather all year column names into a new column called Year and assign its values to a column called gdp
+clean_manufacturing <- gather(manufacturing,Year,Manufacturing.Rate,-Country.Name,-Country.Code,-Indicator.Name,-Indicator.Code)
+manufacturing_data <- clean_manufacturing[,!colnames(clean_manufacturing) %in% c("Indicator.Name","Indicator.Code")]
+head(clean_manufacturing)
+
+#Reading Manufacturing percentage data.
+trade = read.csv("Trade.csv",check.names = FALSE)
+country_indicator_names <- make.names(names(trade[c(1:4)])) 
+#country_indicator_names
+
+#Get year column names
+year_column_names <- names(trade[c(5:ncol(trade))])
+#year_column_names
+
+#Reassign the modified column names to actual column names
+names(trade) <- c(country_indicator_names,year_column_names)
+names(trade)
+
+#Gather all year column names into a new column called Year and assign its values to a column called gdp
+clean_trade <- gather(trade,Year,Trade,-Country.Name,-Country.Code,-Indicator.Name,-Indicator.Code)
+trade_data <- clean_trade[,!colnames(clean_trade) %in% c("Indicator.Name","Indicator.Code")]
+head(clean_trade)
+```
+
+```{r}
+# Join all data
+
+#gdp_cpi = merge(gdp_data,unemp_data, by=c("Country.Code","Year"), all = T) # NA's match
+#manufacturing_data = merge(manufacturing_data,unemp_data,by=c("Country.Code","Year"), all = T) # NA's match
+#economy_data = merge(manufacturing_data,gdp_cpi, by=c("Country.Code","Year"), all = T) # NA's match
+
+economy_data <- left_join(gdp_data,cpi_data, by = c("Country.Code","Country.Name","Year"))%>%        left_join(.,manufacturing_data,by=c("Country.Code","Country.Name","Year")) %>% 
+left_join(.,unemp_data, by=c("Country.Code","Country.Name","Year")) %>%
+left_join(.,trade_data,by=c("Country.Code","Country.Name","Year"))
+
+dim(economy_data)
+names(economy_data)
+```
+
+
+```{r}
+economy_data = economy_data[c("Country.Name", "Country.Code", "Year", "GDP", "Unemployment.Rate", "CPI","Manufacturing.Rate","Trade")]
+
+# Clean up data
+economy_data = economy_data[!(is.na(economy_data$Unemployment.Rate) & is.na(economy_data$CPI) & is.na(economy_data$GDP) & is.na(economy_data$Manufacturing.Rate) & is.na(economy_data$Trade)),]
+
+#Backing up economy data to obtain region level data later
+economy_data_full <- economy_data
+
+country_codes = read.csv("country-codes.csv")
+
+country_data = economy_data[economy_data$Country.Code %in% country_codes$ISO3166.1.Alpha.3,]
+
+#rm(list = ls()[grep("economy_data", ls(), invert = T)])
+
+economy_data <- country_data 
+
+# Clean up the working space
+rm(list = ls()[grep("economy_data", ls(), invert = T)])
+```
+
+
+## Exploratory Analysis
+
+How many unique observations to you have?
+
+The number of unique observations for CPI, GDP, unemployment, manufacturing and trade respectively are:
+
+```{r}
+nrow(economy_data[!is.na(economy_data$CPI),])
+nrow(economy_data[!is.na(economy_data$GDP),])
+nrow(economy_data[!is.na(economy_data$Unemployment.Rate),])
+nrow(economy_data[!is.na(economy_data$Manufacturing.Rate),])
+nrow(economy_data[!is.na(economy_data$Trade),])
+```
+
+What information/features/characteristics do you have for each observation?
+
+We modify the scope of our dataset from 1991 to 2014, since unemployment data is only available for this range.
+
+```{r}
+economy_data <- economy_data[economy_data$Year>=1991 & economy_data$Year<=2014,]
+head(economy_data)
+```
+
+What are the min/max/mean/median/sd values for each of these features?
+
+```{r summary_stats_cpi}
+#Summary values for CPI
+summary(economy_data$CPI,na.rm = TRUE)
+sd(economy_data$CPI, na.rm = TRUE)
+
+#Summary values for GDP
+summary(economy_data$GDP,na.rm = TRUE)
+sd(economy_data$GDP, na.rm = TRUE)
+
+#Summary values for Unemployment
+summary(economy_data$Unemployment.Rate,na.rm = TRUE)
+sd(economy_data$Unemployment.Rate, na.rm = TRUE)
+
+#Summary values for Manufacturing
+summary(economy_data$Manufacturing.Rate,na.rm = TRUE)
+sd(economy_data$Manufacturing.Rate, na.rm = TRUE)
+
+#Summary values for Trade
+summary(economy_data$Trade,na.rm = TRUE)
+sd(economy_data$Trade, na.rm = TRUE)
+
+```
+
+We found the averages for CPI, gdp, unemployment, manufacturing and trade for all the countries.
+Now, let's manipulate the dataset to include a column to indicate if the time period for the data is before(1991-2006) or after(2007-2014) the economic crisis.
+
+
+```{r}
+economy_data <- economy_data %>% mutate(Time_Period = ifelse(Year < 2007,"Before Crisis","After Crisis"))
+head(economy_data)
+```
+
+Converting Time_Period to a factor variable and releveling the labels.
+
+```{r}
+economy_data$Time_Period <- as.character(economy_data$Time_Period)
+economy_data$Time_Period <- factor(economy_data$Time_Period, levels = c("Before Crisis", "After Crisis"))
+levels(economy_data$Time_Period)
+```
+
+
+```{r}
+ggplot(economy_data, aes(x=Time_Period, y = Unemployment.Rate))+geom_boxplot(na.rm = T)
+```
+
+The boxplot confirms the finding the median unemployment is almost the same before and after crisis.
+This is an interesting finding since the 2007 economic crisis led to unemployment. We will try to analyze how the unemployment trends varied post recession by drilling down further.
+
+
+```{r}
+ggplot(economy_data, aes(x=Time_Period, y = CPI))+geom_boxplot(na.rm = T)
+```
+
+The median CPI has increased increased post the crisis but the variability has got much less over time.
+
+```{r}
+ggplot(economy_data, aes(x=Time_Period, y = GDP))+ylim(0,100000000)+geom_boxplot(na.rm = T)
+```
+
+The median gdp has decreased post the crisis but the variability has got much less over time.
+
+```{r}
+ggplot(economy_data, aes(x=Time_Period, y = Manufacturing.Rate))+geom_boxplot(na.rm = T)
+```
+
+The median manufacturing rate has decreased post the crisis.
+
+```{r}
+ggplot(economy_data, aes(x=Time_Period, y = Trade))+geom_boxplot(na.rm = T)
+```
+
+
+What is the distribution of the core features (show a histogram)?
+
+Below are the histograms of the distribution of the CPI, GDP, Unemployment, Manufacturing and Trade before and after 2007 economic crisis.
+
+```{r hist_cpi}
+ggplot(economy_data, aes(x = CPI)) +
+  geom_histogram(fill = "white",
+                 color = "black",
+                 binwidth = 5,na.rm = T)+facet_grid(.~Time_Period)
+```
+
+The distribution of CPI was significantly different before and after crisis. The count of the number of countries with higher inflation rates increased after crisis.
+
+```{r}
+
+ggplot(economy_data, aes(x = GDP)) +
+  geom_histogram(fill = "white",
+                 color = "black",na.rm = T)+facet_grid(.~Time_Period)
+
+```
+
+
+```{r}
+
+ggplot(economy_data, aes(x = Unemployment.Rate)) +
+  geom_histogram(fill = "white",
+                 color = "black",
+                 binwidth = 0.5,na.rm = T)+facet_grid(.~Time_Period)
+```
+
+
+```{r}
+
+ggplot(economy_data, aes(x = Manufacturing.Rate)) +
+  geom_histogram(fill = "white",
+                 color = "black",na.rm = T)+facet_grid(.~Time_Period)
+
+```
+
+```{r}
+
+ggplot(economy_data, aes(x = Trade)) +
+  geom_histogram(fill = "white",
+                 color = "black",na.rm = T)+facet_grid(.~Time_Period)
+
+```
+
+Data frame to include only 3 regions of reference: South Asia, USA and EU
+
+```{r}
+region_data <- economy_data_full %>% filter(Year>=1991 & Year<=2014 & (Country.Code == 'SAS' | Country.Code == 'NAC' | Country.Code == 'EUU'))
+region_data <- region_data %>% mutate(Time_Period = ifelse(Year < 2007,"Before Crisis","After Crisis"))
+head(region_data)
+region_data$Time_Period <- as.character(region_data$Time_Period)
+region_data$Time_Period <- factor(region_data$Time_Period, levels = c("Before Crisis", "After Crisis"))
+levels(region_data$Time_Period)
+write.csv(region_data,file = "region_data.csv")
+```
+
+
+Let's understand the effect of CPI,GDP and Unemployment further by analyzing trend graph from 1991 to 2014 in USA,Canada,China and India.
+
+Are there obvious trends in the data (over time, across subgroups, etc.), and are the differences statistically significant?
+
+```{r}
+unemp_compare <- region_data %>%
+  select(Country.Name,Country.Code,Year,Unemployment.Rate,Time_Period) %>%
+  filter(Year >= 1991 & Year<= 2014 & (Country.Code =='EUU'| Country.Code == 'SAS' | Country.Code == 'NAC')) %>%
+  group_by(Year)
+
+ggplot(unemp_compare,aes(x = Year, y = Unemployment.Rate, col = Country.Code, group = Country.Code)) +geom_line(na.rm = T,lwd = 1)+ theme(axis.text.x=element_text(angle=90, hjust=1))
+```
+
+There is a steep increase in the uemployment rates of North America and Europe while South Asia is comparitively stable post the 2008 recession.
+
+
+```{r}
+manufacturing_compare <- region_data %>%
+  select(Country.Name,Country.Code,Year,Manufacturing.Rate) %>%
+  filter(Year >= 1991 & Year<= 2014 & (Country.Code =='EUU'| Country.Code == 'SAS' | Country.Code == 'NAC')) %>%
+  group_by(Year)
+
+ggplot(manufacturing_compare,aes(x = Year, y = Manufacturing.Rate, col = Country.Code, group = Country.Code)) +geom_line(na.rm = T,lwd = 1)+ theme(axis.text.x=element_text(angle=90, hjust=1))
+```
+
+
+```{r}
+trade_compare <- region_data %>%
+  select(Country.Name,Country.Code,Year,Trade) %>%
+  filter(Year >= 1991 & Year<= 2014 & (Country.Code =='EUU'| Country.Code == 'SAS' | Country.Code == 'NAC')) %>%
+  group_by(Year)
+
+ggplot(trade_compare,aes(x = Year, y = Trade, col = Country.Code, group = Country.Code)) +geom_line(na.rm = T,lwd = 1)+ theme(axis.text.x=element_text(angle=90, hjust=1))
+```
+
+
+What are the other salient aspects of the data (e.g. geospatial factors, text content, etc.)
+
+The following plots are forecasts for each of the selected country's future unemployment rates based on the 1991-2014 data.  This also provides a projection of what the unemployment rates might have looked like in the absence of the data post the financial crisis
+
+```{r} 
+#NAC unemployment forecast vs actual, 2000-2007
+par(mfrow=c(1,3))
+trends.usa <-region_data %>% select(Year,Unemployment.Rate,Country.Code) %>% filter(Country.Code == "NAC")  
+trendsts.usa <- ts(as.vector(trends.usa$Unemployment.Rate),start = c(1991,1), end = c(2014), frequency = 1)
+
+
+trends.usabc <- region_data  %>% select(Year,Unemployment.Rate,Country.Code) %>% filter(Country.Code == "NAC" & Year >=1991 & Year<=2007)
+trendsts.usabc <- ts(as.vector(trends.usabc$Unemployment.Rate),start = c(1991,1), end = c(2007), frequency = 1)
+#install.packages("forecast")
+
+
+trends.usaac <- region_data  %>% select(Year,Unemployment.Rate,Country.Code) %>% filter(Country.Code == "NAC" & Year >=1991 & Year<=2008)
+trendsts.usaac <- ts(as.vector(trends.usabc$Unemployment.Rate),start = c(1991,1), end = c(2008), frequency = 1)
+#install.packages("forecast")
+
+
+trends.arimausa<- auto.arima(trendsts.usabc, seasonal = FALSE)
+trends.arimausa
+trend.preds<-forecast.Arima(trends.arimausa,h=12)
+plot.forecast(trend.preds, ylim = c(2,10), xlim = c(2000,2010),xlab="NAC Unemployment fcst, 1991-2007 data", ylab="% Unemployment")
+
+summary(trend.preds)
+plot(trendsts.usa, ylim = c(2,10), xlim = c(2000,2010), xlab="NAC Actual Unemployment" ,ylab="% Unemployment")
+
+
+trends.arimausa<- auto.arima(trendsts.usaac, seasonal = FALSE)
+trends.arimausa
+trend.preds<-forecast.Arima(trends.arimausa,h=12)
+plot.forecast(trend.preds, ylim = c(2,10), xlim = c(2000,2010),xlab="NAC Unemployment fcst, 1991-2008 data", ylab="% Unemployment")
+```
+
+
+```{r}
+par(mfrow=c(1,3))
+#EU unemployment forecast vs actual, 2000-2007
+#needs work
+trends.eu <-region_data %>% select(Year,Unemployment.Rate,Country.Code) %>% filter(Country.Code == "EUU")  
+trendsts.eu <- ts(as.vector(trends.eu$Unemployment.Rate),start = c(1991,1), end = c(2014), frequency = 1)
+
+trends.eubc <- region_data  %>% select(Year,Unemployment.Rate,Country.Code) %>% filter(Country.Code == "EUU" & Year >=1991 & Year<=2007)
+trendsts.eubc <- ts(as.vector(trends.eubc$Unemployment.Rate),start = c(1991,1), end = c(2007), frequency = 1)
+
+trends.euac <- region_data  %>% select(Year,Unemployment.Rate,Country.Code) %>% filter(Country.Code == "EUU" & Year >=1991 & Year<=2008)
+trendsts.euac <- ts(as.vector(trends.euac$Unemployment.Rate),start = c(1991,1), end = c(2008), frequency = 1)
+
+trends.arimaeu<- auto.arima(trendsts.eubc, seasonal = FALSE) 
+trends.arimaeu
+trend.preds<-forecast.Arima(trends.arimaeu,h=12)
+plot.forecast(trend.preds, ylim = c(2,10), xlim = c(2000,2010),xlab="EUU unemployment forecast, 1991-2007 data",ylab="% Unemployment")
+
+summary(trend.preds)
+plot(trendsts.eu, ylim = c(2,10), xlim = c(2000,2010), xlab="EUU Actual Unemployment",ylab="% Unemployment")
+
+trends.arimaeu<- auto.arima(trendsts.euac,seasonal = FALSE)
+trends.arimaeu
+trend.preds<-forecast.Arima(trends.arimaeu,h=12)
+plot.forecast(trend.preds, ylim = c(2,10), xlim = c(2000,2010),xlab="NAC Unemployment fcst, 1991-2008 data", ylab="% Unemployment")
+```
+
+```{r}
+par(mfrow=c(1,3))
+#SAS unemployment forecast vs actual, 2000-2007
+trends.sas <-region_data %>% select(Year,Unemployment.Rate,Country.Code) %>% filter(Country.Code == "SAS")
+trendsts.sas <- ts(as.vector(trends.sas$Unemployment.Rate),start = c(1991,1), end = c(2014), frequency = 1)
+
+trends.sasbc <- region_data  %>% select(Year,Unemployment.Rate,Country.Code) %>% filter(Country.Code == "SAS" & Year >=1991 & Year<=2007)
+trendsts.sasbc <- ts(as.vector(trends.sasbc$Unemployment.Rate),start = c(1991,1), end = c(2007), frequency = 1)
+
+trends.sasac <- region_data  %>% select(Year,Unemployment.Rate,Country.Code) %>% filter(Country.Code == "SAS" & Year >=1991 & Year<=2008)
+trendsts.sasac <- ts(as.vector(trends.sasac$Unemployment.Rate),start = c(1991,1), end = c(2008), frequency = 1)
+
+trends.arimasas<- auto.arima(trendsts.sasbc) 
+trend.preds<-forecast.Arima(trends.arimasas,h=12)
+plot.forecast(trend.preds, ylim = c(2,10), xlim = c(2000,2010),xlab="SAS unemployment forecast, 1991-2007 data",ylab="% Unemployment")
+
+summary(trend.preds)
+plot(trendsts.sas, ylim = c(2,10), xlim = c(2000,2010), xlab="SAS Actual Unemployment",ylab="% unemployment")
+
+trends.arimasas<- auto.arima(trendsts.sasac) 
+trend.preds<-forecast.Arima(trends.arimasas,h=12)
+plot.forecast(trend.preds, ylim = c(2,10), xlim = c(2000,2010),xlab="SAS unemployment forecast, 1991-2008 data",ylab="% Unemployment")
+```
+
+```{r}
+#manufacturing rate US region
+par(mfrow=c(1,3))
+trends.usa <-region_data %>% select(Year,Manufacturing.Rate,Country.Code) %>% filter(Country.Code == "NAC")  
+trendsts.usa <- ts(as.vector(trends.usa$Manufacturing.Rate),start = c(1991,1), end = c(2014), frequency = 1)
+
+trends.usabc <- region_data  %>% select(Year,Manufacturing.Rate,Country.Code) %>% filter(Country.Code == "NAC" & Year >=1991 & Year<=2007)
+trendsts.usabc <- ts(as.vector(trends.usabc$Manufacturing.Rate),start = c(1991,1), end = c(2007), frequency = 1)
+
+trends.usaac <- region_data  %>% select(Year,Manufacturing.Rate,Country.Code) %>% filter(Country.Code == "NAC" & Year >=1991 & Year<=2008)
+trendsts.usaac <- ts(as.vector(trends.usaac$Manufacturing.Rate),start = c(1991,1), end = c(2008), frequency = 1)
+
+trends.arimausa<- auto.arima(trendsts.usabc)
+trend.preds<-forecast.Arima(trends.arimausa,h=12)
+plot.forecast(trend.preds, ylim = c(10,18), xlim = c(2000,2010), xlab="NAC mfg forecast, 1991-2007 data", ylab="rate")
+
+summary(trend.preds)
+plot(trendsts.usa, ylim = c(10,18), xlim = c(2000,2010), xlab="NAC Actual Mfg",ylab="% unemployment")
+
+trends.arimausa<- auto.arima(trendsts.usaac)
+trend.preds<-forecast.Arima(trends.arimausa,h=12)
+plot.forecast(trend.preds, ylim = c(10,18), xlim = c(2000,2010), xlab="NAC mfg forecast, 1991-2008 data", ylab="rate")
+```
+
+```{r}
+par(mfrow=c(1,3))
+#manufacturing rate EUU region
+trends.euu <-region_data %>% select(Year,Manufacturing.Rate,Country.Code) %>% filter(Country.Code == "EUU")
+trendsts.euu <- ts(as.vector(trends.euu$Manufacturing.Rate),start = c(1991,1), end = c(2014), frequency = 1)
+
+trends.eubc <- region_data  %>% select(Year,Manufacturing.Rate,Country.Code) %>% filter(Country.Code == "EUU" & Year >=1991 & Year<=2007)
+trendsts.eubc <- ts(as.vector(trends.eubc$Manufacturing.Rate),start = c(1991,1), end = c(2007), frequency = 1)
+
+trends.euac <- region_data  %>% select(Year,Manufacturing.Rate,Country.Code) %>% filter(Country.Code == "EUU" & Year >=1991 & Year<=2008)
+trendsts.euac <- ts(as.vector(trends.euac$Manufacturing.Rate),start = c(1991,1), end = c(2008), frequency = 1)
+
+trends.arimaeu<- auto.arima(trendsts.eubc)
+trend.preds<-forecast.Arima(trends.arimaeu,h=12)
+plot.forecast(trend.preds, ylim = c(12,20), xlim = c(2000,2010), xlab="EUU mfg forecast, 1991-2007 data", ylab="rate")
+
+plot(trendsts.euu,ylim = c(12,20), xlim = c(2000,2010),xlab="EUU mfg rate", ylab="rate")
+
+trends.arimaeu<- auto.arima(trendsts.euac)
+trend.preds<-forecast.Arima(trends.arimaeu,h=12)
+plot.forecast(trend.preds, ylim = c(12,20),xlim = c(2000,2010), xlab="EUU mfg forecast, 1991-2008 data", ylab="rate")
+```
+
+```{r}
+par(mfrow=c(1,3))
+#manufacturing rate SAS region
+trends.sas <-region_data %>% select(Year,Manufacturing.Rate,Country.Code) %>% filter(Country.Code == "SAS")
+trendsts.sas <- ts(as.vector(trends.sas$Manufacturing.Rate),start = c(1991,1), end = c(2014), frequency = 1)
+
+trends.sasbc <- region_data  %>% select(Year,Manufacturing.Rate,Country.Code) %>% filter(Country.Code == "SAS" & Year >=1991 & Year<=2007)
+trendsts.sasbc <- ts(as.vector(trends.sasbc$Manufacturing.Rate),start = c(1991,1), end = c(2007), frequency = 1)
+
+trends.sasac <- region_data  %>% select(Year,Manufacturing.Rate,Country.Code) %>% filter(Country.Code == "SAS" & Year >=1991 & Year<=2008)
+trendsts.sasac <- ts(as.vector(trends.sasac$Manufacturing.Rate),start = c(1991,1), end = c(2008), frequency = 1)
+
+trends.arimasas<- auto.arima(trendsts.sasbc)
+trend.preds<-forecast.Arima(trends.arimasas,h=12)
+plot.forecast(trend.preds, ylim = c(14,20), xlim = c(2000,2010), xlab="SAS mfg forecast, 1991-2007 data", ylab="rate")
+
+plot(trendsts.sas,ylim = c(14,20),xlim = c(2000,2010),xlab="SAS mfg rate", ylab="rate")
+
+trends.arimasas<- auto.arima(trendsts.sasac)
+trend.preds<-forecast.Arima(trends.arimasas,h=12)
+plot.forecast(trend.preds,  ylim = c(14,20),xlim = c(2000,2010), xlab="SAS mfg forecast, 1991-2008 data", ylab="rate")
+```
+
+```{r}
+par(mfrow=c(1,3))
+#US trade
+trends.usa <-region_data %>% select(Year,Trade,Country.Code) %>% filter(Country.Code == "NAC")  
+trendsts.usa <- ts(as.vector(trends.usa$Trade),start = c(1991,1), end = c(2014), frequency = 1)
+
+trends.usabc <- region_data  %>% select(Year,Trade,Country.Code) %>% filter(Country.Code == "NAC" & Year >=1991 & Year<=2007)
+trendsts.usabc <- ts(as.vector(trends.usabc$Trade),start = c(1991,1), end = c(2007), frequency = 1)
+
+trends.usaac <- region_data  %>% select(Year,Trade,Country.Code) %>% filter(Country.Code == "NAC" & Year >=1991 & Year<=2008)
+trendsts.usaac <- ts(as.vector(trends.usaac$Trade),start = c(1991,1), end = c(2008), frequency = 1)
+
+trends.arimausa<- auto.arima(trendsts.usabc)
+trend.preds<-forecast.Arima(trends.arimausa,h=12)
+plot.forecast(trend.preds, ylim = c(25,35),xlim = c(2000,2010),xlab="NAC trade forecast, 1991-2007 data", ylab="rate")
+
+plot(trendsts.usa,  ylim = c(25,35),xlim = c(2000,2010),xlab="NAC actual trade rate", ylab="rate")
+
+trends.arimausa<- auto.arima(trendsts.usaac)
+trend.preds<-forecast.Arima(trends.arimausa,h=12)
+plot.forecast(trend.preds,ylim = c(25,35), xlim = c(2000,2010),xlab="NAC trade forecast, 1991-2008 data", ylab="rate")
+```
+
+```{r}
+par(mfrow=c(1,3))
+#EU trade
+trends.eu <-region_data %>% select(Year,Trade,Country.Code) %>% filter(Country.Code == "EUU")  
+trendsts.eu <- ts(as.vector(trends.eu$Trade),start = c(1991,1), end = c(2014), frequency = 1)
+
+trends.eubc <- region_data  %>% select(Year,Trade,Country.Code) %>% filter(Country.Code == "EUU" & Year >=1991 & Year<=2007)
+trendsts.eubc <- ts(as.vector(trends.eubc$Trade),start = c(1991,1), end = c(2007), frequency = 1)
+
+trends.euac <- region_data  %>% select(Year,Trade,Country.Code) %>% filter(Country.Code == "EUU" & Year >=1991 & Year<=2008)
+trendsts.euac <- ts(as.vector(trends.euac$Trade),start = c(1991,1), end = c(2008), frequency = 1)
+
+trends.arimaeu<- auto.arima(trendsts.eubc)
+trend.preds<-forecast.Arima(trends.arimaeu,h=12)
+plot.forecast(trend.preds,ylim = c(60,90), xlim = c(2000,2010),xlab="EUU trade forecast, 1991-2007 data", ylab="rate")
+
+plot(trendsts.eu, ylim = c(60,90), xlim = c(2000,2010),xlab="EUU actual trade rate", ylab="rate")
+
+trends.arimaeu<- auto.arima(trendsts.euac)
+trend.preds<-forecast.Arima(trends.arimaeu,h=12)
+plot.forecast(trend.preds, ylim = c(60,90),xlim = c(2000,2010),xlab="EUU trade forecast, 1991-2008 data", ylab="rate")
+```
+
+```{r}
+par(mfrow=c(1,3))
+#SAS trade
+trends.sas <-region_data %>% select(Year,Trade,Country.Code) %>% filter(Country.Code == "SAS")  
+trendsts.sas <- ts(as.vector(trends.sas$Trade),start = c(1991,1), end = c(2014), frequency = 1)
+
+trends.sasbc <- region_data  %>% select(Year,Trade,Country.Code) %>% filter(Country.Code == "SAS" & Year >=1991 & Year<=2007)
+trendsts.sasbc <- ts(as.vector(trends.sasbc$Trade),start = c(1991,1), end = c(2007), frequency = 1)
+
+trends.sasac <- region_data  %>% select(Year,Trade,Country.Code) %>% filter(Country.Code == "SAS" & Year >=1991 & Year<=2008)
+trendsts.sasac <- ts(as.vector(trends.sasac$Trade),start = c(1991,1), end = c(2008), frequency = 1)
+
+trends.arimasas<- auto.arima(trendsts.sasbc)
+trend.preds<-forecast.Arima(trends.arimasas,h=12)
+plot.forecast(trend.preds,ylim = c(20,70), xlim = c(2000,2010),xlab="SAS trade forecast, 1991-2007 data", ylab="rate")
+
+plot(trendsts.sas,ylim = c(20,70),xlim = c(2000,2010),xlab="SAS actual trade rate", ylab="rate")
+
+trends.arimasas<- auto.arima(trendsts.sasac)
+trend.preds<-forecast.Arima(trends.arimasas,h=12)
+plot.forecast(trend.preds, ylim = c(20,70),xlim = c(2000,2010),xlab="SAS trade forecast, 1991-2008 data", ylab="rate")
+```
+
+```{r}
+par(mfrow=c(1,3))
+#US GDP
+trends.usa <-region_data %>% select(Year,GDP,Country.Code) %>% filter(Country.Code == "NAC")  
+trendsts.usa <- ts(as.vector(trends.usa$GDP),start = c(1991,1), end = c(2014), frequency = 1)
+
+trends.usabc <- region_data  %>% select(Year,GDP,Country.Code) %>% filter(Country.Code == "NAC" & Year >=1991 & Year<=2007)
+trendsts.usabc <- ts(as.vector(trends.usabc$GDP),start = c(1991,1), end = c(2007), frequency = 1)
+
+trends.usaac <- region_data  %>% select(Year,GDP,Country.Code) %>% filter(Country.Code == "NAC" & Year >=1991 & Year<=2008)
+trendsts.usaac <- ts(as.vector(trends.usaac$GDP),start = c(1991,1), end = c(2008), frequency = 1)
+
+trends.arimausa<- auto.arima(trendsts.usabc)
+trend.preds<-forecast.Arima(trends.arimausa,h=12)
+plot.forecast(trend.preds,ylim = c(1.0e+13,2.0e+13), xlim = c(2000,2010), xlab="NAR GDP forecast, 1991-2007 data")
+
+plot(trendsts.usa , ylim = c(1.0e+13,2.0e+13), xlim = c(2000,2010),xlab="NAR GDP", ylab ="point value")
+
+trends.arimausa<- auto.arima(trendsts.usaac)
+trend.preds<-forecast.Arima(trends.arimausa,h=12)
+plot.forecast(trend.preds, ylim = c(1.0e+13,2.0e+13),xlim = c(2000,2010), xlab="NAR GDP forecast, 1991-2008 data")
+```
+
+```{r}
+par(mfrow=c(1,3))
+#EUU GDP
+trends.eu <-region_data %>% select(Year,GDP,Country.Code) %>% filter(Country.Code == "EUU")  
+trendsts.eu <- ts(as.vector(trends.eu$GDP),start = c(1991,1), end = c(2014), frequency = 1)
+
+trends.eubc <- region_data  %>% select(Year,GDP,Country.Code) %>% filter(Country.Code == "EUU" & Year >=1991 & Year<=2007)
+trendsts.eubc <- ts(as.vector(trends.eubc$GDP),start = c(1991,1), end = c(2007), frequency = 1)
+
+trends.euac <- region_data  %>% select(Year,GDP,Country.Code) %>% filter(Country.Code == "EUU" & Year >=1991 & Year<=2008)
+trendsts.euac <- ts(as.vector(trends.eubc$GDP),start = c(1991,1), end = c(2008), frequency = 1)
+
+trends.arimaeu<- auto.arima(trendsts.eubc)
+trend.preds<-forecast.Arima(trends.arimaeu,h=12)
+plot.forecast(trend.preds, ylim=c(8e+12,2.5e+13),xlim = c(2000,2010), xlab="EU GDP forecast, 1991-2007 data")
+
+plot(trendsts.eu , ylim=c(8e+12,2.5e+13), xlim = c(2000,2010),xlab="EU GDP")
+
+trends.arimaeu<- auto.arima(trendsts.euac)
+trend.preds<-forecast.Arima(trends.arimaeu,h=12)
+plot.forecast(trend.preds, ylim=c(8e+12,2.5e+13),xlim = c(2000,2010), xlab="EU GDP forecast, 1991-2008 data")
+```
+
+```{r}
+par(mfrow=c(1,3))
+#SAS GDP
+trends.sas <-region_data %>% select(Year,GDP,Country.Code) %>% filter(Country.Code == "SAS")  
+trendsts.sas <- ts(as.vector(trends.sas$GDP),start = c(1991,1), end = c(2014), frequency = 1)
+
+trends.sasbc <- region_data  %>% select(Year,GDP,Country.Code) %>% filter(Country.Code == "SAS" & Year >=1991 & Year<=2007)
+trendsts.sasbc <- ts(as.vector(trends.sasbc$GDP),start = c(1991,1), end = c(2007), frequency = 1)
+
+trends.sasac <- region_data  %>% select(Year,GDP,Country.Code) %>% filter(Country.Code == "SAS" & Year >=1991 & Year<=2008)
+trendsts.sasac <- ts(as.vector(trends.sasbc$GDP),start = c(1991,1), end = c(2008), frequency = 1)
+
+trends.arimasas<- auto.arima(trendsts.sasbc)
+trend.preds<-forecast.Arima(trends.arimasas,h=12)
+plot.forecast(trend.preds,ylim = c(0e+12, 3e+12),xlim = c(2000,2010), xlab="SAS GDP forecast, 1991-2007 data")
+
+plot(trendsts.sas ,ylim = c(0e+12, 4e+12) ,xlim = c(2000,2010),xlab="SAS GDP")
+
+trends.arimasas<- auto.arima(trendsts.sasac)
+trend.preds<-forecast.Arima(trends.arimasas,h=12)
+plot.forecast(trend.preds,ylim = c(0e+12, 3e+12),xlim = c(2000,2010), xlab="SAS GDP forecast, 1991-2008 data")
+```
+
+
+```{r}
+CPI_trend<-read.csv("CPI_World_Bank.csv")
+#plot(CPI_trend$)
+colnames(CPI_trend)
+#goal here is time period on x and CPI on y.
+trends<-read.csv("Timeseries.csv")
+class(trends)
+#summary(lm(Time ~ CPI_USA, data=trends))
+#plot(trends)
+#abline(lsfit(x=trends$Time,y=trends$CPI_USA),col="red")
+#install.packages('tseries') 
+require(tseries) 
+#install.packages('xts')
+require(xts)
+#converting data into time series data
+trends.ts<-ts(as.vector(trends), start = c(1960,1), end = c(2015),frequency = 1)
+trends.ts
+class(trends.ts)
+plot(trends.ts)
+#Dickey-fuller test to see if the time series is stationary.
+adf.test(trends.ts)
+#Checking for p and q values through auto correlation function and partial auto correlation function.
+acf(trends.ts)
+pacf(trends.ts)
+#this is an AR model
+#install.packages('forecast')
+auto.arima(trends.ts)
+trends.arimausa<- arima(trends.ts, order=c(1,2,1))
+trends.arimausa
+trend.preds<-forecast.Arima(trends.arimausa,h=12)
+plot.forecast(trend.preds)
+summary(trend.preds)
+
+#Hypothesis testing for USA CPI data
+#install.packages('lmtest')
+coeftest(trends.arimausa)
+#z value is 2.2014, p=0.02771
+#another way to obtain p value to verify
+(1-pnorm(abs(trends.arimausa$coef)/sqrt(diag(trends.arimausa$var.coef))))*2
+
+trends.resid <- residuals(trends.arimausa)
+Box.test(trends.resid, lag = 10, type = "Ljung-Box")
+```
+
+Attempt to find trends in the CPI data.
+This data set contains CPI for 265 countries over a period of 56 years.
+The variable CPI is time sensitive.
+We have used Dickey-fuller test to see if the time series is stationary and checked for p and q values through auto correlation function and partial auto correlation function.
+
+p value obtained from this analysis is 0.027. Since CPI was an AR series, we will analyze this further on the statistical significance and its effect on the hypothesis.
+
+Provide a bullet-list of the next 5-10 tasks you will perform in analyzing your dataset
+
+1. Compare the time series prediction with the actual data and see how well did the prediction work by checking statistical significance.
+2. Improve the time series analysis across all the predictors and see how to convert our dataframe into timeseries for easier analysis.
+3. Add more predictors to the dataset and analyze correlation. For example, we could add mental health to see the effects of the crisis on these predictors. We need to check feasibility of obtaining and merging such data into our analysis.
+4. Quantify the propagation of the shock to the predictors due to the 2007 crisis using autocorrelation or other techniques.
+5. Visualize the change in predictors on a map using geospatial plotting tools.

@@ -1,0 +1,159 @@
+
+---
+title: "Complete Analysis - Effect of Economic Crisis"
+author: "Sharmila Biswas"
+output: html_document
+---
+
+Github link: https://github.com/Shormi5399/Data-Science-I-Project
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(ggplot2)
+library(tidyr)
+library(dplyr)
+library(forecast)
+library(lmtest)
+```
+
+Cleaning up the data!
+
+```{r load_cpi}
+cpi = read.csv("CPI_World_Bank.csv",check.names = FALSE)
+#Get country and indicator column names and remove spaces using make.names
+country_indicator_names <- make.names(names(cpi[c(1:4)])) 
+#country_indicator_names
+
+#Get year column names
+year_column_names <- names(cpi[c(5:ncol(cpi))])
+#year_column_names
+
+#Reassign the modified column names to actual column names
+names(cpi) <- c(country_indicator_names,year_column_names)
+names(cpi)
+
+#Gather all year column names into a new column called Year and assign its values to a column called CPI
+clean_cpi <- gather(cpi,Year,CPI,-Country.Name,-Country.Code,-Indicator.Name,-Indicator.Code)
+cpi_data <- clean_cpi[,!colnames(clean_cpi) %in% c("Indicator.Name","Indicator.Code")]
+head(clean_cpi)
+
+unemp = read.csv("Unemployment_ILO.csv",check.names = FALSE)
+country_indicator_names <- make.names(names(unemp[c(1:4)])) 
+#country_indicator_names
+
+#Get year column names
+year_column_names <- names(unemp[c(5:ncol(unemp))])
+#year_column_names
+
+#Reassign the modified column names to actual column names
+names(unemp) <- c(country_indicator_names,year_column_names)
+names(unemp)
+
+#Gather all year column names into a new column called Year and assign its values to a column called unemp
+clean_unemp <- gather(unemp,Year,Unemployment.Rate,-Country.Name,-Country.Code,-Indicator.Name,-Indicator.Code)
+unemp_data <- clean_unemp[,!colnames(clean_unemp) %in% c("Indicator.Name","Indicator.Code")]
+head(clean_unemp)
+
+gdp = read.csv("gdp.csv",check.names = FALSE)
+country_indicator_names <- make.names(names(gdp[c(1:4)])) 
+#country_indicator_names
+
+#Get year column names
+year_column_names <- names(gdp[c(5:ncol(gdp))])
+#year_column_names
+
+#Reassign the modified column names to actual column names
+names(gdp) <- c(country_indicator_names,year_column_names)
+names(gdp)
+
+#Gather all year column names into a new column called Year and assign its values to a column called gdp
+clean_gdp <- gather(gdp,Year,GDP,-Country.Name,-Country.Code,-Indicator.Name,-Indicator.Code)
+gdp_data <- clean_gdp[,!colnames(clean_gdp) %in% c("Indicator.Name","Indicator.Code")]
+head(clean_gdp)
+
+#Reading Manufacturing percentage data.
+manufacturing = read.csv("Manufacturing.csv",check.names = FALSE)
+country_indicator_names <- make.names(names(manufacturing[c(1:4)])) 
+#country_indicator_names
+
+#Get year column names
+year_column_names <- names(manufacturing[c(5:ncol(manufacturing))])
+#year_column_names
+
+#Reassign the modified column names to actual column names
+names(manufacturing) <- c(country_indicator_names,year_column_names)
+names(manufacturing)
+
+#Gather all year column names into a new column called Year and assign its values to a column called gdp
+clean_manufacturing <- gather(manufacturing,Year,Manufacturing.Rate,-Country.Name,-Country.Code,-Indicator.Name,-Indicator.Code)
+manufacturing_data <- clean_manufacturing[,!colnames(clean_manufacturing) %in% c("Indicator.Name","Indicator.Code")]
+head(clean_manufacturing)
+
+#Reading Manufacturing percentage data.
+trade = read.csv("Trade.csv",check.names = FALSE)
+country_indicator_names <- make.names(names(trade[c(1:4)])) 
+#country_indicator_names
+
+#Get year column names
+year_column_names <- names(trade[c(5:ncol(trade))])
+#year_column_names
+
+#Reassign the modified column names to actual column names
+names(trade) <- c(country_indicator_names,year_column_names)
+names(trade)
+
+#Gather all year column names into a new column called Year and assign its values to a column called gdp
+clean_trade <- gather(trade,Year,Trade,-Country.Name,-Country.Code,-Indicator.Name,-Indicator.Code)
+trade_data <- clean_trade[,!colnames(clean_trade) %in% c("Indicator.Name","Indicator.Code")]
+head(clean_trade)
+```
+
+```{r}
+# Join all data
+
+#gdp_cpi = merge(gdp_data,unemp_data, by=c("Country.Code","Year"), all = T) # NA's match
+#manufacturing_data = merge(manufacturing_data,unemp_data,by=c("Country.Code","Year"), all = T) # NA's match
+#economy_data = merge(manufacturing_data,gdp_cpi, by=c("Country.Code","Year"), all = T) # NA's match
+
+economy_data <- left_join(gdp_data,cpi_data, by = c("Country.Code","Country.Name","Year"))%>%        left_join(.,manufacturing_data,by=c("Country.Code","Country.Name","Year")) %>% 
+left_join(.,unemp_data, by=c("Country.Code","Country.Name","Year")) %>%
+left_join(.,trade_data,by=c("Country.Code","Country.Name","Year"))
+
+dim(economy_data)
+names(economy_data)
+```
+
+
+```{r}
+economy_data = economy_data[c("Country.Name", "Country.Code", "Year", "GDP", "Unemployment.Rate", "CPI","Manufacturing.Rate","Trade")]
+
+# Clean up data
+economy_data = economy_data[!(is.na(economy_data$Unemployment.Rate) & is.na(economy_data$CPI) & is.na(economy_data$GDP) & is.na(economy_data$Manufacturing.Rate) & is.na(economy_data$Trade)),]
+
+#Backing up economy data to obtain region level data later
+economy_data_full <- economy_data
+
+country_codes = read.csv("country-codes.csv")
+
+country_data = economy_data[economy_data$Country.Code %in% country_codes$ISO3166.1.Alpha.3,]
+
+#rm(list = ls()[grep("economy_data", ls(), invert = T)])
+
+economy_data <- country_data 
+
+# Clean up the working space
+rm(list = ls()[grep("economy_data", ls(), invert = T)])
+write.csv(economy_data, file = "economy_data.csv")
+```
+
+Data frame to include only 3 regions of reference: South Asia, USA and EU
+
+```{r}
+region_data <- economy_data_full %>% filter(Year>=1991 & Year<=2014 & (Country.Code == 'SAS' | Country.Code == 'NAC' | Country.Code == 'EUU'))
+region_data <- region_data %>% mutate(Time_Period = ifelse(Year < 2007,"Before Crisis","After Crisis"))
+head(region_data)
+region_data$Time_Period <- as.character(region_data$Time_Period)
+region_data$Time_Period <- factor(region_data$Time_Period, levels = c("Before Crisis", "After Crisis"))
+levels(region_data$Time_Period)
+write.csv(region_data,file = "region_data.csv")
+```
